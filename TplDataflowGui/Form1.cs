@@ -96,7 +96,7 @@ namespace TplDataflowGui
                 int uniqIndex = Interlocked.Increment(ref fileIndexSeq);
                 Debug.WriteLine($"Сохраняем на диск №{uniqIndex}");
                 await File.WriteAllBytesAsync(Path.Combine(outputDir.FullName, uniqIndex + ".jpg"), imgBytes);
-            });
+            }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = Environment.ProcessorCount });
 
             var broadcastResult = new BroadcastBlock<byte[]>(clone => clone);
 
@@ -104,7 +104,7 @@ namespace TplDataflowGui
             {
                 using (var mem = new MemoryStream(imgBytes))
                     return Image.FromStream(mem);
-            });
+            }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = Environment.ProcessorCount });
 
             var linkToOpt = new DataflowLinkOptions { PropagateCompletion = true };
             
