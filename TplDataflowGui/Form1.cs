@@ -30,17 +30,19 @@ namespace TplDataflowGui
             Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
         }
 
-        private DirectoryInfo GetDirectory()
+        private bool TryGetDirectory(out DirectoryInfo selectedDir)
         {
             using (var fbd = new FolderBrowserDialog())
             {
                 fbd.SelectedPath = AppDomain.CurrentDomain.BaseDirectory;
                 if (fbd.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath))
                 {
-                    return new DirectoryInfo(fbd.SelectedPath);
+                    selectedDir = new DirectoryInfo(fbd.SelectedPath);
+                    return true;
                 }
             }
-            return null;
+            selectedDir = null;
+            return false;
         }
 
         private void Button_cancel_Click(object sender, EventArgs e)
@@ -53,20 +55,19 @@ namespace TplDataflowGui
 
         private async Task CompressAsync(int? threadsLimit)
         {
-            DirectoryInfo imagesDir = GetDirectory();
-            if (imagesDir == null)
+            if (!TryGetDirectory(out DirectoryInfo imagesDir))
             {
                 Close();
                 return;
             }
 
             // Пользователь может остановить конвейер на любом этапе.
-            var cts = _cts = new CancellationTokenSource();                    
+            var cts = _cts = new CancellationTokenSource();
 
             var compressionBlock = new TransformBlock<byte[], byte[]>(async rawJpeg =>   // Конвейер сжимающий файл в массив байт.
             {
                 return await MozJpeg.Instance.CompressAsync(rawJpeg, maximumQuality: 75);
-            }, 
+            },
             new ExecutionDataflowBlockOptions
             {
                 EnsureOrdered = false,                               // Возвращать файлы не в порядке поступления.              
@@ -76,18 +77,18 @@ namespace TplDataflowGui
                 CancellationToken = cts.Token,
             });
 
-            var broadcastResult = new BroadcastBlock<byte[]>(clone => clone);
+            var broadcastResult = new BroadcastBlock<byte[]>(clone => clone);   // Конвейер распространяющий копии.
 
             int fileIndexSeq = 0;
-            var saveToDiskOpt = new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = Environment.ProcessorCount };
+            var saveToDiskOpt = new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = DataflowBlockOptions.Unbounded };
             var saveToDisk = new ActionBlock<byte[]>(async imgBytes =>               // Конвейер сохраняющий на диск.
             {
                 string uniqName = Interlocked.Increment(ref fileIndexSeq) + ".jpg";  // Потокобезопасно назначаем имя файлу.
-                await File.WriteAllBytesAsync(Path.Combine(_outputDir.FullName, uniqName), imgBytes);
+                    await File.WriteAllBytesAsync(Path.Combine(_outputDir.FullName, uniqName), imgBytes);
 
             }, saveToDiskOpt);
 
-            var prepUiOpt = new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = Environment.ProcessorCount };
+            var prepUiOpt = new ExecutionDataflowBlockOptions { EnsureOrdered = false, MaxDegreeOfParallelism = DataflowBlockOptions.Unbounded };
             var prepareUiImage = new TransformBlock<byte[], Image>(imgBytes => // Конвейер подготовки изображения для UI.
             {
                 using (var mem = new MemoryStream(imgBytes))
@@ -116,7 +117,7 @@ namespace TplDataflowGui
             prepareUiImage.LinkTo(displayImageBlock, linkToOpt);    // Объект Image отобразить в UI потоке.
 
             try
-            { 
+            {
                 // Уйти из UI потока.
                 await Task.Run(async () =>
                 {
@@ -124,7 +125,7 @@ namespace TplDataflowGui
                     {
                         byte[] rawJpg = await File.ReadAllBytesAsync(jpgPath.FullName).ConfigureAwait(false);
                         if (!await compressionBlock.SendAsync(rawJpg).ConfigureAwait(false))     // Передать файл в конвейер. Блокируется при достижении лимита.
-                            break;
+                            break;      // Задача отменена.
                     }
                     compressionBlock.Complete();
 
@@ -138,7 +139,7 @@ namespace TplDataflowGui
             }
             finally
             {
-                cts?.Cancel();
+                _cts?.Cancel();
             }
         }
 
@@ -154,51 +155,6 @@ namespace TplDataflowGui
             button1.Enabled = true;
             checkBox1.Enabled = true;
             button_cancel.Enabled = false;
-        }
-
-        private async Task CompressBySizeAsync()
-        {
-            var cts = new CancellationTokenSource();
-            try
-            {
-                var compressionBlock = new TransformBlock<int, int>(quality =>
-                {
-                    Console.WriteLine($"Обработка №{quality}");
-                    Thread.Sleep(quality * 100);
-                    return quality;
-
-                }, new ExecutionDataflowBlockOptions { EnsureOrdered = true, MaxDegreeOfParallelism = 6, CancellationToken = cts.Token });
-
-                compressionBlock.Post(85); // 2000 кБ
-                compressionBlock.Post(84); // 1900 кБ
-                compressionBlock.Post(83); // 1800 кБ
-                compressionBlock.Post(82); // 1700 кБ
-                compressionBlock.Post(81); // 1600 кБ
-                compressionBlock.Post(80); // 1500 кБ
-                compressionBlock.Post(79); // 1400 кБ
-                compressionBlock.Post(78); // 1200 кБ
-                compressionBlock.Post(77); // 1050 кБ
-                compressionBlock.Post(76); //  900 кБ *
-                compressionBlock.Post(75); //  600 кБ
-
-                compressionBlock.Complete();
-
-                while (await compressionBlock.OutputAvailableAsync())
-                {
-                    compressionBlock.TryReceive(null, out int quality);
-                    Console.WriteLine($"Завершен №{quality}");
-
-                    if (quality == 76)
-                    {
-                        cts.Cancel();
-                        cts = null;
-                    }
-                }
-            }
-            finally
-            {
-                cts?.Cancel();
-            }
         }
 #else
         private void Button_Compress_Click(object sender, EventArgs e)
