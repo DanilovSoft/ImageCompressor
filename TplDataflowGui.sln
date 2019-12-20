@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29613.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TplDataflowGui", "TplDataflowGui\TplDataflowGui.csproj", "{094F1AC5-0AB4-4CD6-A001-E07491BA03B1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{094F1AC5-0AB4-4CD6-A001-E07491BA03B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{094F1AC5-0AB4-4CD6-A001-E07491BA03B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{094F1AC5-0AB4-4CD6-A001-E07491BA03B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{094F1AC5-0AB4-4CD6-A001-E07491BA03B1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {39CD40D6-F615-48FB-8C61-E0C0E4A8DB04}
+	EndGlobalSection
+EndGlobal
