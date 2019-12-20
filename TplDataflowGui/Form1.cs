@@ -11,6 +11,7 @@ using System.Windows.Forms;
 using System.IO;
 using System.Diagnostics;
 using DanilovSoft;
+using System.Reflection;
 #if NETCOREAPP3_1
 using System.Threading.Tasks.Dataflow;
 #endif
@@ -38,15 +39,14 @@ namespace TplDataflowGui
             return null;
         }
 
-#if NETCOREAPP3_1
-
-        private async void Form1_Load(object sender, EventArgs e)
+        private void Form1_Load_1(object sender, EventArgs e)
         {
-            await Task.Delay(200);
-            Compress();
+            
         }
 
-        private async void Compress()
+#if NETCOREAPP3_1
+
+        private async Task CompressAsync(int? threadsLimit)
         {
             DirectoryInfo imagesDir = GetDirectory();
             if (imagesDir == null)
@@ -55,38 +55,33 @@ namespace TplDataflowGui
                 return;
             }
 
-            DirectoryInfo outputDir = new DirectoryInfo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Optimized_Images"));
+            var outputDir = new DirectoryInfo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Optimized_Images"));
             outputDir.Create();
 
             var cts = new CancellationTokenSource();                    // Пользователь может остановить конвейер на любом этапе.
 
-            var compressOpt = new ExecutionDataflowBlockOptions
+            var compressionOpt = new ExecutionDataflowBlockOptions
             {
-                EnsureOrdered = false,                                  // Сжимать файлы не в порядке поступления.              
-                MaxDegreeOfParallelism = Environment.ProcessorCount,    // Максимально используем все ресурсы процессора.
-                BoundedCapacity = Environment.ProcessorCount + 1,       // Держать на готове дополнительно один файл.
+                EnsureOrdered = false,                              // Возвращать файлы не в порядке поступления.              
+                MaxDegreeOfParallelism = threadsLimit ?? Environment.ProcessorCount,
+                BoundedCapacity = Environment.ProcessorCount + 1,   // Держать на готове дополнительно один файл.
                 CancellationToken = cts.Token,
             };
 
-            var compressBlock = new TransformBlock<byte[], byte[]>(async rawJpeg =>   // Конвейер сжимающий файл в массив байт.
+            var compressionBlock = new TransformBlock<byte[], byte[]>(async rawJpeg =>   // Конвейер сжимающий файл в массив байт.
             {
                 Debug.WriteLine("compressBlock");
                 using (var inputStream = new MemoryStream(rawJpeg))
                 using (var outputStream = new MemoryStream())
                 {
-                    await JpegOptim.Instance.CompressAsync(inputStream, outputStream, 75);
+                    await JpegOptim.Instance.CompressAsync(inputStream, outputStream, maximumQuality: 75);
                     return outputStream.ToArray();
                 }
-            }, compressOpt);
+            }, compressionOpt);
 
-            var displayResultBlock = new ActionBlock<byte[]>(imgBytes =>    // Конвейер отображает сжатое изображение на форме.
+            var displayImageBlock = new ActionBlock<Image>(img =>    // Конвейер отображает сжатое изображение на форме.
             {
                 Debug.WriteLine("displayResultBlock");
-
-                Image img;
-                using (var mem = new MemoryStream(imgBytes))
-                    img = Image.FromStream(mem);
-
                 var picBox = new PictureBox();
                 picBox.SizeMode = PictureBoxSizeMode.StretchImage;
                 picBox.Size = new Size(100, 100);
@@ -94,7 +89,6 @@ namespace TplDataflowGui
                 flowLayoutPanel1.Controls.Add(picBox);
 
             }, new ExecutionDataflowBlockOptions { TaskScheduler = TaskScheduler.FromCurrentSynchronizationContext() });
-
 
             int fileIndexSeq = 0;
             var saveToDisk = new ActionBlock<byte[]>(async imgBytes => 
@@ -106,25 +100,34 @@ namespace TplDataflowGui
 
             var broadcastResult = new BroadcastBlock<byte[]>(clone => clone);
 
-            // Соединить выход конвейера сжатия в UI конвеер и конвеер сохраняющий на диск.
-            compressBlock.LinkTo(broadcastResult, new DataflowLinkOptions { PropagateCompletion = true });
-            broadcastResult.LinkTo(displayResultBlock, new DataflowLinkOptions { PropagateCompletion = true });
-            broadcastResult.LinkTo(saveToDisk, new DataflowLinkOptions { PropagateCompletion = true });
+            var prepareUIImage = new TransformBlock<byte[], Image>(imgBytes => 
+            {
+                using (var mem = new MemoryStream(imgBytes))
+                    return Image.FromStream(mem);
+            });
+
+            var linkToOpt = new DataflowLinkOptions { PropagateCompletion = true };
+            
+            compressionBlock.LinkTo(broadcastResult, linkToOpt);    // Сжатое изображение направить в Broadcast.
+            broadcastResult.LinkTo(saveToDisk, linkToOpt);          // Копию сжатого изображения сохранить на диск.
+            broadcastResult.LinkTo(prepareUIImage, linkToOpt);      // Копию сжатого изображения преобразовать в объект Image.
+            prepareUIImage.LinkTo(displayImageBlock, linkToOpt);    // Объект Image отобразить в UI потоке.
 
             try
             { 
+                // Уйти из UI потока.
                 await Task.Run(async () =>
                 {
-                    foreach (FileInfo jpgPath in imagesDir.EnumerateFiles("*.jpg"))     // Все файлы в папке грузим в конвейер.
+                    foreach (FileInfo jpgPath in imagesDir.EnumerateFiles("*.jpg"))         // Все файлы в папке грузим в конвейер.
                     {
-                        byte[] rawJpg = File.ReadAllBytes(jpgPath.FullName);
-                        await compressBlock.SendAsync(rawJpg).ConfigureAwait(false);     // Передать файл в конвейер. Блокируется при достижении лимита.
+                        byte[] rawJpg = await File.ReadAllBytesAsync(jpgPath.FullName).ConfigureAwait(false);
+                        await compressionBlock.SendAsync(rawJpg).ConfigureAwait(false);     // Передать файл в конвейер. Блокируется при достижении лимита.
                     }
-                    compressBlock.Complete();
-                });
+                    compressionBlock.Complete();
 
-                // Ждём когда будут отображены и сохранены все изображения.
-                await Task.WhenAll(saveToDisk.Completion, displayResultBlock.Completion);
+                    // Ждём когда будут отображены и сохранены все изображения.
+                    await Task.WhenAll(saveToDisk.Completion, displayImageBlock.Completion);
+                });
             }
             catch (Exception ex)
             {
@@ -136,12 +139,23 @@ namespace TplDataflowGui
             }
         }
 
-        private async Task CompressImageAsync()
+        private async void Button_Compress_Click(object sender, EventArgs e)
+        {
+            int? threadsLimit = checkBox1.Checked ? (int?)null : 1;
+
+            button1.Enabled = false;
+            checkBox1.Enabled = false;
+            await CompressAsync(threadsLimit);
+            button1.Enabled = true;
+            checkBox1.Enabled = true;
+        }
+
+        private async Task CompressBySizeAsync()
         {
             var cts = new CancellationTokenSource();
             try
             {
-                var transformBlock = new TransformBlock<int, int>(quality =>
+                var compressionBlock = new TransformBlock<int, int>(quality =>
                 {
                     Console.WriteLine($"Обработка №{quality}");
                     Thread.Sleep(quality * 100);
@@ -149,23 +163,23 @@ namespace TplDataflowGui
 
                 }, new ExecutionDataflowBlockOptions { EnsureOrdered = true, MaxDegreeOfParallelism = 6, CancellationToken = cts.Token });
 
-                transformBlock.Post(85); // 2000 кБ
-                transformBlock.Post(84); // 1900 кБ
-                transformBlock.Post(83); // 1800 кБ
-                transformBlock.Post(82); // 1700 кБ
-                transformBlock.Post(81); // 1600 кБ
-                transformBlock.Post(80); // 1500 кБ
-                transformBlock.Post(79); // 1400 кБ
-                transformBlock.Post(78); // 1200 кБ
-                transformBlock.Post(77); // 1050 кБ
-                transformBlock.Post(76); //  900 кБ *
-                transformBlock.Post(75); //  600 кБ
+                compressionBlock.Post(85); // 2000 кБ
+                compressionBlock.Post(84); // 1900 кБ
+                compressionBlock.Post(83); // 1800 кБ
+                compressionBlock.Post(82); // 1700 кБ
+                compressionBlock.Post(81); // 1600 кБ
+                compressionBlock.Post(80); // 1500 кБ
+                compressionBlock.Post(79); // 1400 кБ
+                compressionBlock.Post(78); // 1200 кБ
+                compressionBlock.Post(77); // 1050 кБ
+                compressionBlock.Post(76); //  900 кБ *
+                compressionBlock.Post(75); //  600 кБ
 
-                transformBlock.Complete();
+                compressionBlock.Complete();
 
-                while (await transformBlock.OutputAvailableAsync())
+                while (await compressionBlock.OutputAvailableAsync())
                 {
-                    transformBlock.TryReceive(null, out int quality);
+                    compressionBlock.TryReceive(null, out int quality);
                     Console.WriteLine($"Завершен №{quality}");
 
                     if (quality == 76)
@@ -187,6 +201,11 @@ namespace TplDataflowGui
         }
 
         private async void Form1_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button1_Click(object sender, EventArgs e)
         {
 
         }

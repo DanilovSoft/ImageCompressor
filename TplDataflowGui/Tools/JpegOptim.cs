@@ -93,6 +93,7 @@ namespace DanilovSoft
             proc.StartInfo.RedirectStandardOutput = true;
             proc.StartInfo.RedirectStandardError = true;
             proc.Start();
+            proc.PriorityClass = ProcessPriorityClass.BelowNormal;
             return proc;
         }
 
