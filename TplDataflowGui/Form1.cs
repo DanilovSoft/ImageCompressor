@@ -123,7 +123,7 @@ namespace TplDataflowGui
                 {
                     foreach (FileInfo jpgPath in imagesDir.EnumerateFiles("*.jpg"))         // Все файлы в папке грузим в конвейер.
                     {
-                        byte[] rawJpg = await File.ReadAllBytesAsync(jpgPath.FullName).ConfigureAwait(false);
+                        byte[] rawJpg = await File.ReadAllBytesAsync(jpgPath.FullName);
                         if (!await compressionBlock.SendAsync(rawJpg).ConfigureAwait(false))     // Передать файл в конвейер. Блокируется при достижении лимита.
                             break;      // Задача отменена.
                     }
