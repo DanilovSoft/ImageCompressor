@@ -72,7 +72,7 @@ namespace TplDataflowGui
             {
                 EnsureOrdered = false,                               // Возвращать файлы не в порядке поступления.              
                 MaxDegreeOfParallelism = threadsLimit ?? Environment.ProcessorCount,
-                BoundedCapacity = Environment.ProcessorCount + 1,    // Держать на готове дополнительно один файл.
+                BoundedCapacity = Environment.ProcessorCount * 2,    // Держать на готове дополнительно один файл.
                 SingleProducerConstrained = true,                    // Утверждаем что только один поток будет добавлять данные.
                 CancellationToken = cts.Token,
             });
