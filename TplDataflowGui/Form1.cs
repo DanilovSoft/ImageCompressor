@@ -27,6 +27,7 @@ namespace TplDataflowGui
 
             _outputDir.Create();
             button_cancel.Enabled = false;
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
         }
 
         private DirectoryInfo GetDirectory()
@@ -149,7 +150,6 @@ namespace TplDataflowGui
             button1.Enabled = false;
             checkBox1.Enabled = false;
             await CompressAsync(threadsLimit);
-            GC.Collect();
             button1.Enabled = true;
             checkBox1.Enabled = true;
             button_cancel.Enabled = false;

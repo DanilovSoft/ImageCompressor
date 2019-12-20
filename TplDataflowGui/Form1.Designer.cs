@@ -44,7 +44,7 @@
             this.flowLayoutPanel1.AutoScroll = true;
             this.flowLayoutPanel1.Location = new System.Drawing.Point(3, 3);
             this.flowLayoutPanel1.Name = "flowLayoutPanel1";
-            this.flowLayoutPanel1.Size = new System.Drawing.Size(1018, 697);
+            this.flowLayoutPanel1.Size = new System.Drawing.Size(1018, 707);
             this.flowLayoutPanel1.TabIndex = 1;
             // 
             // panel1
@@ -54,9 +54,9 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.panel1.AutoScroll = true;
             this.panel1.Controls.Add(this.flowLayoutPanel1);
-            this.panel1.Location = new System.Drawing.Point(1, 83);
+            this.panel1.Location = new System.Drawing.Point(12, 73);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(1024, 703);
+            this.panel1.Size = new System.Drawing.Size(1024, 713);
             this.panel1.TabIndex = 2;
             // 
             // checkBox1
@@ -93,7 +93,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1029, 787);
+            this.ClientSize = new System.Drawing.Size(1048, 787);
             this.Controls.Add(this.button_cancel);
             this.Controls.Add(this.button1);
             this.Controls.Add(this.checkBox1);

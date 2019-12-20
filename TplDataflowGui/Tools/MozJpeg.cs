@@ -45,7 +45,7 @@ namespace DanilovSoft
             proc.StartInfo.RedirectStandardOutput = true;
             proc.StartInfo.RedirectStandardError = true;
             proc.Start();
-            proc.PriorityClass = ProcessPriorityClass.BelowNormal;
+            proc.PriorityClass = ProcessPriorityClass.AboveNormal;
             return proc;
         }
 
@@ -60,6 +60,7 @@ namespace DanilovSoft
             proc.StartInfo.RedirectStandardOutput = true;
             proc.StartInfo.RedirectStandardError = true;
             proc.Start();
+            proc.PriorityClass = ProcessPriorityClass.AboveNormal;
             return proc;
         }
 
